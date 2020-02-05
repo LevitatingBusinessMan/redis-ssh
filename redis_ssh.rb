@@ -49,6 +49,11 @@ OptionParser.new do |parser|
     end
 end.parse!
 
+if !@opts[:host]
+	puts "Invalid arguments!"
+	return
+end
+
 class Log
 
 	def self.info msg
