@@ -163,7 +163,7 @@ end
 def sdir dir
 	return if !dir
 	dirarr = dir.split("/").reject{|x|x.empty?}
-	if dirarr[0] == "home" or dirarr[0] = "root"
+	if dirarr[0] == "home" or dirarr[0] == "root"
 		user = dirarr[1] if dirarr[0] == "home"
 		user = "root" if dirarr[0] == "root"
 
@@ -204,7 +204,7 @@ if @info["executable"]
 	sdir @info["executable"]
 end
 if @info["config_file"]
-	Log.info "Config_file: #{@info["executable"]}"
+	Log.info "Config_file: #{@info["Config_file"]}"
 	sdir @info["config_file"]
 end
 
@@ -237,8 +237,6 @@ elsif !@opts[:dir]
 	Log.warn "Using directory '/home/#{user}/.ssh'"
 	@opts[:dir] = "/home/#{user}/.ssh"
 end
-
-File.write "#{host_dir}/user", @opts[:user]
 
 Log.info "Setting configuration directory"
 out = send "config set dir #{@opts[:dir]}"
@@ -285,6 +283,9 @@ Log.info "Saving database"
 out = send "save"
 Log.res out if @opts[:verbose]
 return Log.err "Failed to save database" if out != "+OK\r\n"
+
+# Save user for later runs
+File.write "#{host_dir}/user", @opts[:user]
 
 Log.info "Running ssh"
 exec "ssh -i #{host_dir}/id_rsa #{@opts[:user]}@#{@opts[:host]} -p #{@opts[:sshport]}"
