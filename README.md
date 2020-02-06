@@ -1,5 +1,7 @@
 # REDIS-SSH
 This script attempts to exploit unauthenticated redis servers by writing a public key to .ssh/authorized_keys.
+It should work on any server serving Redis publicly, persistent and unauthenticated as user with a .ssh directory.
+It only requires a host and appropiate ports to run.
 
 ```
 Usage: ./redis_ssh.rb [options]

