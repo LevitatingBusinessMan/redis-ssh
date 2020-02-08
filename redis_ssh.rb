@@ -203,8 +203,9 @@ if @info["executable"]
 	Log.info "Executable: #{@info["executable"]}"
 	sdir @info["executable"]
 end
+
 if @info["config_file"]
-	Log.info "Config_file: #{@info["Config_file"]}"
+	Log.info "Config_file: #{@info["config_file"]}"
 	sdir @info["config_file"]
 end
 
