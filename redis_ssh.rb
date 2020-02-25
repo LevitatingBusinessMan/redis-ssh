@@ -15,7 +15,7 @@ puts <<-'EOF'
 By Levitating
 https://github.com/LevitatingBusinessMan/redis-ssh
 
-Version 1.0.1
+Version 1.1.0
 
 EOF
 
