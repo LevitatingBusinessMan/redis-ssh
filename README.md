@@ -10,9 +10,10 @@ Usage: ./redis_ssh.rb [options]
     -v, --[no-]verbose               Run verbosely
     -t, --timeout TIME               Time to wait for packets (default: 1)
     -u, --user USER                  Force specific user
-    -d, --dir DIR                    Force specific directory
+    -d, --dir DIR                    Force specific .ssh directory
     -s, --sshport PORT               Port to ssh to (default: 22)
     -c, --check                      Run a vulnerability check
     -i, --info                       Print info about a redis server
+    -e, --stealth                    Restore configuration to stay hidden
         --help                       Print this help
 ```
